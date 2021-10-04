@@ -1,0 +1,5 @@
+# LinuxKit stuff
+/*.img
+/*-cmdline
+/*-kernel
+/*-state/
