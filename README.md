@@ -12,9 +12,13 @@ The goals of this investigation are to see if I can feasibly replace the followi
 2. The ability to **run** OCI-compliant images (with _at least_ host-local networking and ability to tty to running container).
 3. The ability to upload OCI-compliant images to Dockerhub and/or Github or other container registries (lower priority)
 
+## Conclusion:
+
+At least for now [podman] is amazing drop-in replacement for docker on macOS.
+
 ## TODO
 
-- [ ] checkout [podman]
+- [+] checkout [podman]
 - [ ] add example of running a command in a linuxkit image and immediately halting or stopping the image and piping the process exit code to the host.
 - [ ] TODO: Although linuxkit doesn't run OCI containers, it is fundamentally a linux VM with [containerd] and [`ctr`] (I cannot find docs on `ctr` but it is a command that allow dealing with containers on containerd hosts and is in the linuxkit VMs). So conceivably we could figure out a way to run OCI images on a linuxkit-vm locally (I _)\_think_ that's effectively what Docker for Mac does).
   - [ ] add an example of running [img] in a linuxkit container to build a Dockerfile into an [OCI-bundle] and saving the OCI-bundle on the host (e.g. mounted volume). See https://github.com/genuinetools/img#running-with-docker
@@ -23,6 +27,64 @@ The goals of this investigation are to see if I can feasibly replace the followi
 ## Alternative Exploration
 
 ### 1. Building
+
+#### Podman: TODO
+
+##### Installation:
+
+See https://podman.io/getting-started/installation
+tldr;
+
+```sh
+brew install podman
+# brew install qemu if you don't have qemu already (or maybe homebrew installs it? I already had it)
+podman machine init # downloads a qemu vm
+podman machine start # starts a qemu vm
+
+# ensure everyting is running:
+podman info
+```
+
+##### Building
+
+tldr `alias docker=podman` https://podman.io/whatis.html
+
+```sh
+# Build it (this is glorified way to call podman build -f ....)
+./scripts/podman/build.sh ./image-defs/podman/simpliest.containerfile
+
+# see the image:
+podman images
+```
+
+##### Running
+
+again, just like docker, but the below script has some notes and more detail
+
+```sh
+./scripts/podman/start.sh ./image-defs/podman/simpleist.containerfile
+
+# you can see it running:
+podman ps
+
+
+# stop it
+./scripts/podman/stop.sh ./image-defs/podman/simpleist.containerfile
+
+# you can see it stopped:
+podman ps -a
+```
+
+##### Podman Shutting it down
+
+To shutdown podman's vm:
+
+```sh
+podman machine stop
+
+# if it shutdown properly the followign will show some error:
+podman info
+```
 
 #### LinuxKit: WORKS (sort of)
 
