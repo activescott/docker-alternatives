@@ -12,6 +12,14 @@ The goals of this investigation are to see if I can feasibly replace the followi
 2. The ability to **run** OCI-compliant images (with _at least_ host-local networking and ability to tty to running container).
 3. The ability to upload OCI-compliant images to Dockerhub and/or Github or other container registries (lower priority)
 
+## TODO
+
+- [ ] checkout [podman]
+- [ ] add example of running a command in a linuxkit image and immediately halting or stopping the image and piping the process exit code to the host.
+- [ ] TODO: Although linuxkit doesn't run OCI containers, it is fundamentally a linux VM with [containerd] and [`ctr`] (I cannot find docs on `ctr` but it is a command that allow dealing with containers on containerd hosts and is in the linuxkit VMs). So conceivably we could figure out a way to run OCI images on a linuxkit-vm locally (I _)\_think_ that's effectively what Docker for Mac does).
+  - [ ] add an example of running [img] in a linuxkit container to build a Dockerfile into an [OCI-bundle] and saving the OCI-bundle on the host (e.g. mounted volume). See https://github.com/genuinetools/img#running-with-docker
+  - [ ] Add an example of running an oci-bundle on the host within a linuxkit vm
+
 ## Alternative Exploration
 
 ### 1. Building
@@ -23,7 +31,9 @@ LinuxKit doesn't build containers, it builds executable Linux-based images that 
 The images are built by specifying a raw linux kernal, some basic "init" packges, and then you reference standard OCI containers for anything else you want such as additional apps and services. It pulls them from dockerhub. Essentially it boostraps Linux, starts [containerd], [runc] and then it is a tiny Linux OS that can run containers!
 Specify all this in [LinuxKit's image defintion yaml][linuxkit-yaml].
 
-##### LinuxKit Cheat Sheet
+##### LinuxKit Example: simplest
+
+This is the most simple example of a linuxkit image building and running.
 
 ```sh
 # build a runnable VM image with linuxkit use:
@@ -32,14 +42,31 @@ Specify all this in [LinuxKit's image defintion yaml][linuxkit-yaml].
 # Run the built VM image (this will generate a terminal):
 ./scripts/linuxkit/start.sh ./image-defs/linuxkit/simplest.yml
 
-# Stop while running:
+# Stop while running (from a different terminal on the host):
 ./scripts/linuxkit/stop.sh ./image-defs/linuxkit/simplest.yml
+
+# you can also stop it within the terminal using alpine/busybox's poweroff command
+poweroff -f
+
 ```
 
-- [ ] TODO: Although linuxkit doesn't run OCI containers, it is fundamentally a linux VM with [containerd] and [`ctr`] (I cannot find docs on `ctr` but it is a command that allow dealing with containers on containerd hosts and is in the linuxkit VMs). So conceivably we could figure out a way to run OCI images on a linuxkit-vm locally (I _)_think_ that's effectively what Docker for Mac does).
+##### LinuxKit Example: ssh
 
-- [ ] TODO: add example to to make it run an image with a designated commmand and immediately exit and return the result to host (e.g. useful for running tests, i don't think this is an issue just want to add an example).
-- [ ] TODO: add example with host-local networking to allow host or other containers to hit a service running in the VM.
+```sh
+# build a runnable VM image with linuxkit use:
+./scripts/linuxkit/build.sh ./image-defs/linuxkit/sshd.yml
+
+# Run the built VM image (this will producce a terminal into the vm):
+./scripts/linuxkit/start.sh ./image-defs/linuxkit/sshd.yml -publish 2222:22
+
+# From another terminal now you can ssh into it with (
+# NOTE: If you get the "Host key verification failed" error aftering doing this once, you might need to run `ssh-keygen -R [localhost]:2222` to remove the old entry from your known_hosts)
+ssh -p2222 root@localhost
+```
+
+#### LinuxKit Inspecting containerd containers...
+
+Each service is it's own container with it's own layered filesystem. So some interesting things happen depending on the container/layer you're working with. For example in the tty terminal that appears after a `linuxkit run...`, is in the getty container and that one doesn't see the files added by subsequent layers? However, from that terminal you can run [ctr] like this to access one of the other containers `ctr -n services.linuxkit task exec -t --exec-id fooo sshd ls -la /root/`. In this command `sshd` is the container name (its a "service" in the sshd.yml file) and linuxkit by default puts services into a namespace named `services.linuxkit` so you have to specify that when dealing with `ctr`.
 
 #### "Moby Build Tool" (N/A - see LinuxKit)
 
@@ -77,7 +104,7 @@ brew install qemu
 
 Essentially it is `linuxkit run qemu simpleist` (where `simpleist` is the prefix used when building the image (inferred from the basename of the .yml file by default).
 
-#### Building Images: LinuxKit (WORKS)
+#### Building Images: LinuxKit (WORKS - sort of)
 
 Just build them with `linuxkit build -format "kernel+initrd" ./simplest.yml` and it createst a set of files with `simplest-` in the same directory including the kernel, the raw disk image cmdline, etc.
 
@@ -121,3 +148,4 @@ This shouldn't be that hard, there is a simple rest api IIRC I'm sure tools exis
 [buildpacks]: https://buildpacks.io/docs/concepts/
 [img]: https://github.com/genuinetools/img
 [ctr]: https://github.com/containerd/containerd/blob/main/cmd/ctr/app/main.go#L61
+[podman]: https://github.com/containers/podman
