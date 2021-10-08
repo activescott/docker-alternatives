@@ -14,11 +14,11 @@ The goals of this investigation are to see if I can feasibly replace the followi
 
 ## Conclusion:
 
-At least for now [podman] is amazing drop-in replacement for docker on macOS.
+At least for now [podman] is amazing drop-in replacement for docker on macOS. The biggest problem I've found so far is mounting volumes from the macOS host doesn't work (yet).
 
 ## TODO
 
-- [+] checkout [podman]
+- [ ] Find a workaround for or fix for mounting podman host volumes
 - [ ] add example of running a command in a linuxkit image and immediately halting or stopping the image and piping the process exit code to the host.
 - [ ] TODO: Although linuxkit doesn't run OCI containers, it is fundamentally a linux VM with [containerd] and [`ctr`] (I cannot find docs on `ctr` but it is a command that allow dealing with containers on containerd hosts and is in the linuxkit VMs). So conceivably we could figure out a way to run OCI images on a linuxkit-vm locally (I _)\_think_ that's effectively what Docker for Mac does).
   - [ ] add an example of running [img] in a linuxkit container to build a Dockerfile into an [OCI-bundle] and saving the OCI-bundle on the host (e.g. mounted volume). See https://github.com/genuinetools/img#running-with-docker
@@ -26,11 +26,13 @@ At least for now [podman] is amazing drop-in replacement for docker on macOS.
 
 ## Alternative Exploration
 
-### 1. Building
+### Podman
 
-#### Podman: TODO
+#### Podman Issues:
 
-##### Installation:
+You can't (easily) mount volumes from macOS host to container 😢: https://github.com/containers/podman/issues/8016
+
+#### Podman: Installation:
 
 See https://podman.io/getting-started/installation
 tldr;
@@ -45,7 +47,7 @@ podman machine start # starts a qemu vm
 podman info
 ```
 
-##### Building
+#### Podman: Building
 
 tldr `alias docker=podman` https://podman.io/whatis.html
 
@@ -57,7 +59,7 @@ tldr `alias docker=podman` https://podman.io/whatis.html
 podman images
 ```
 
-##### Running
+#### Podman: Running
 
 again, just like docker, but the below script has some notes and more detail
 
@@ -75,7 +77,7 @@ podman ps
 podman ps -a
 ```
 
-##### Podman Shutting it down
+#### Podman: Shutting it down
 
 To shutdown podman's vm:
 
@@ -86,14 +88,38 @@ podman machine stop
 podman info
 ```
 
-#### LinuxKit: WORKS (sort of)
+### [LinuxKit][linuxkit]: WORKS (sort of)
 
 LinuxKit doesn't build containers, it builds executable Linux-based images that run in a variety of VM/hypervisor environments or in baremetal bootable images (🤯). Mac, Windows, and Linux all support VM/hypervisors so you can run the built images just about anywhere... Did I mention baremetal bios-bootable images!?
 
 The images are built by specifying a raw linux kernal, some basic "init" packges, and then you reference standard OCI containers for anything else you want such as additional apps and services. It pulls them from dockerhub. Essentially it boostraps Linux, starts [containerd], [runc] and then it is a tiny Linux OS that can run containers!
 Specify all this in [LinuxKit's image defintion yaml][linuxkit-yaml].
 
-##### LinuxKit Example: simplest
+TLDR:
+
+Build images with `linuxkit build -format "kernel+initrd" ./simplest.yml` and it createst a set of files with `simplest-` in the same directory including the kernel, the raw disk image cmdline, etc.
+
+Run linuxkit images with `linuxkit run qemu simpleist` (where `simpleist` is the prefix used when building the image (inferred from the basename of the .yml file by default).
+
+##### LinuxKit: Installing
+
+The QEMU backend worked perfectly. Just install linuxkit with homebrew and qemu and done.
+
+```sh
+brew tap linuxkit/linuxkit
+brew install --HEAD linuxkit # NOTE: `--HEAD` is important!
+```
+
+```sh
+brew install qemu
+```
+
+#### LinuxKit+HyperKit (NOPE)
+
+I couldn't get the HyperKit backend to work on macOS. The HyperKit backend just came up to the point where it said `[ 3.397123] clocksource: Switched to clocksource tsc` (twice) and it froze.
+HyperKit also depends on [VPNKit] for to make networking work and VPNKit needs built to install and is a hassle to deal with for host networking _and_ QEMU works fine without any of that hassle so 🤷‍♂️.
+
+#### LinuxKit Example: simplest
 
 This is the most simple example of a linuxkit image building and running.
 
@@ -112,7 +138,7 @@ poweroff -f
 
 ```
 
-##### LinuxKit Example: ssh
+#### LinuxKit Example: ssh
 
 ```sh
 # build a runnable VM image with linuxkit use:
@@ -130,7 +156,7 @@ ssh -p2222 root@localhost
 
 Each service is it's own container with it's own layered filesystem. So some interesting things happen depending on the container/layer you're working with. For example in the tty terminal that appears after a `linuxkit run...`, is in the getty container and that one doesn't see the files added by subsequent layers? However, from that terminal you can run [ctr] like this to access one of the other containers `ctr -n services.linuxkit task exec -t --exec-id fooo sshd ls -la /root/`. In this command `sshd` is the container name (its a "service" in the sshd.yml file) and linuxkit by default puts services into a namespace named `services.linuxkit` so you have to specify that when dealing with `ctr`.
 
-#### "Moby Build Tool" (N/A - see LinuxKit)
+### "Moby Build Tool" (N/A - see LinuxKit)
 
 The `moby build` aka "moby tool" was merged into linuxkit presumably as the `linuxkit build` command: https://github.com/moby/tool
 
@@ -146,34 +172,6 @@ BuildKit [seems sure to work for building images from Dockerfile](https://github
 
 This looks to be an effort to replace Dockerfile as a definition of a container and instead use a OCI-image container to build an OCI-image from source.
 Many buildpacks are at https://paketo.io/ and their docs have some examples of how to get started.
-
-### 2. Running
-
-#### [LinuxKit][linuxkit]+QEMU (WORKS)
-
-##### Installing
-
-The QEMU backend worked perfectly. Just install linuxkit with homebrew and qemu and done.
-
-```sh
-brew tap linuxkit/linuxkit
-brew install --HEAD linuxkit # NOTE: `--HEAD` is important!
-```
-
-```sh
-brew install qemu
-```
-
-Essentially it is `linuxkit run qemu simpleist` (where `simpleist` is the prefix used when building the image (inferred from the basename of the .yml file by default).
-
-#### Building Images: LinuxKit (WORKS - sort of)
-
-Just build them with `linuxkit build -format "kernel+initrd" ./simplest.yml` and it createst a set of files with `simplest-` in the same directory including the kernel, the raw disk image cmdline, etc.
-
-#### LinuxKit+HyperKit (NOPE)
-
-I couldn't get the HyperKit backend to work on macOS. The HyperKit backend just came up to the point where it said `[ 3.397123] clocksource: Switched to clocksource tsc` (twice) and it froze.
-HyperKit also depends on [VPNKit] for to make networking work and VPNKit needs built to install and is a hassle to deal with for host networking _and_ QEMU works fine without any of that hassle so 🤷‍♂️.
 
 #### Kubernetes [minikube] (WORKS)
 
